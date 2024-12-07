@@ -28,7 +28,7 @@ def get_issue_body():
 
 # OpenAI APIでdiffパッチを生成
 def generate_patch(issue_content):
-    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    client = OpenAI(api_key=OPENAI_API_KEY)
     prompt = (
         f"以下のIssueを解決するために必要なコード修正をdiff形式で生成してください。\n\n"
         f"Issue内容:\n{issue_content}\n\n"
@@ -37,11 +37,13 @@ def generate_patch(issue_content):
         "diff形式の修正内容\n"
         "```\n"
     )
-    response = openai_client.completions.create(
-        model="gpt-3.5-turbo",  # 無料プランで利用可能なモデル
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
+
+    response = client.chat.completions.create(
+      model="gpt-3.5-turbo",
+      messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello!"}
+      ]
     )
 
     return response.choices[0].text.strip()
