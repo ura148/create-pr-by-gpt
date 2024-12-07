@@ -37,7 +37,7 @@ def generate_patch(issue_content):
         "diff形式の修正内容\n"
         "```\n"
     )
-    response = openai.ChatCompletion.create(
+    response = openai_client.ChatCompletion.create(
         model="gpt-3.5-turbo",  # 無料プランで利用可能なモデル
         messages=[
             {"role": "user", "content": prompt}
