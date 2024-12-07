@@ -46,7 +46,8 @@ def generate_patch(issue_content):
       ]
     )
 
-    return response.choices[0].text.strip()
+
+    return response.choices[0].message.content
 
 # diffパッチを適用
 def apply_patch(diff_text):
