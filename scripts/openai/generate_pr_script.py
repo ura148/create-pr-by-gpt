@@ -1,111 +1,120 @@
 import os
 import requests
-import json
 import subprocess
-
 from openai import OpenAI
 
+# 環境変数から必要な値を取得
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPOSITORY = os.getenv("REPOSITORY")
 ISSUE_NUMBER = os.getenv("ISSUE_NUMBER")
 BASE_BRANCH = os.getenv("BASE_BRANCH", "main")
 
-# Issue API URL
-ISSUE_API_URL = f'https://api.github.com/repos/{REPOSITORY}/issues/{ISSUE_NUMBER}'
-# PR作成用URL
-PULLS_API_URL = f'https://api.github.com/repos/{REPOSITORY}/pulls'
+# APIエンドポイント
+ISSUE_API_URL = f"https://api.github.com/repos/{REPOSITORY}/issues/{ISSUE_NUMBER}"
+PULLS_API_URL = f"https://api.github.com/repos/{REPOSITORY}/pulls"
 
-# 1. Issueの内容を取得
+# Issueの本文を取得
 def get_issue_body():
     headers = {
-        'Authorization': f'token {GITHUB_TOKEN}',
-        'Accept': 'application/vnd.github.v3+json'
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
     }
     response = requests.get(ISSUE_API_URL, headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch issue details: {response.status_code}")
     issue_data = response.json()
-    return issue_data.get('body', ''), issue_data.get('number')
+    return issue_data.get("body", ""), issue_data.get("number")
 
-# 2. OpenAI APIでコード修正案(diff)を生成
-def get_patch_from_openai(issue_content):
-    client = OpenAI(api_key=OPENAI_API_KEY)
+# OpenAI APIでdiffパッチを生成
+def generate_patch(issue_content):
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
     prompt = (
-        f"以下はIssueの要求内容です:\n{issue_content}\n\n"
-        "このIssueを解決するためのコード修正パッチをdiff形式で生成してください。\n"
+        f"以下のIssueを解決するために必要なコード修正をdiff形式で生成してください。\n\n"
+        f"Issue内容:\n{issue_content}\n\n"
+        "出力は以下の形式にしてください:\n"
         "```diff\n"
-        "# 以下に修正のdiffを記載\n"
-        "```"
+        "diff形式の修正内容\n"
+        "```\n"
     )
-
-    # OpenAI Chat Completion呼び出し（モデル名は適宜変更）
-    chat_completion = client.chat.completions.create(
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
-        model="gpt-4-1106-preview",
-        temperature=0,
+    response = openai_client.Completion.create(
+        model="gpt-4-turbo",
+        prompt=prompt,
+        max_tokens=2000,
+        temperature=0
     )
+    return response.choices[0].text.strip()
 
-    content = chat_completion.choices[0].message.content
-    return content
-
-# 3. patch.txtに書き込み＆適用
+# diffパッチを適用
 def apply_patch(diff_text):
-    # diff_textから```diff ...``````を抽出する処理が必要な場合あり
-    # ここでは単純化しているため適宜正規表現などで抽出することを想定
-    with open("patch.txt", "w") as f:
-        f.write(diff_text)
+    # diff部分だけを抽出
+    if "```diff" in diff_text:
+        diff_text = diff_text.split("```diff")[1].split("```")[0].strip()
 
-    # patchを適用
-    # diffブロックだけを抽出するなどの処理が必要な場合あり
-    subprocess.run(["git", "apply", "patch.txt"], check=True)
+    # パッチファイルを作成
+    with open("patch.diff", "w") as patch_file:
+        patch_file.write(diff_text)
 
-# 4. 新規ブランチを作ってコミット＆プッシュ
+    # git applyでパッチ適用
+    result = subprocess.run(["git", "apply", "patch.diff"], check=False)
+    if result.returncode != 0:
+        raise Exception("Failed to apply the patch. Check the diff format or repository status.")
+
+# 新しいブランチを作成し変更をプッシュ
 def create_branch_and_push(issue_number):
     branch_name = f"issue-{issue_number}"
     subprocess.run(["git", "checkout", "-b", branch_name], check=True)
     subprocess.run(["git", "add", "."], check=True)
-    commit_msg = f"Fix from Issue #{issue_number}"
-    subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+    subprocess.run(["git", "commit", "-m", f"Fix from Issue #{issue_number}"], check=True)
     subprocess.run(["git", "push", "origin", branch_name], check=True)
     return branch_name
 
-# 5. PRを作成
+# PRを作成
 def create_pull_request(branch_name, issue_number):
     headers = {
-        'Authorization': f'token {GITHUB_TOKEN}',
-        'Accept': 'application/vnd.github.v3+json'
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
     }
     data = {
-        'title': f"Auto Fix from Issue #{issue_number}",
-        'head': branch_name,
-        'base': BASE_BRANCH,
-        'body': f"This PR fixes the issue #{issue_number} automatically."
+        "title": f"Auto Fix from Issue #{issue_number}",
+        "head": branch_name,
+        "base": BASE_BRANCH,
+        "body": f"This PR resolves issue #{issue_number}."
     }
-    response = requests.post(PULLS_API_URL, headers=headers, data=json.dumps(data))
+    response = requests.post(PULLS_API_URL, headers=headers, json=data)
     if response.status_code == 201:
-        print("Pull Request created successfully!")
+        print("Pull request created successfully.")
     else:
-        print("Failed to create Pull Request:", response.text)
+        print(f"Failed to create pull request: {response.status_code}, {response.text}")
 
-
+# メイン関数
 def main():
-    issue_content, issue_number = get_issue_body()
-    if not issue_content:
-        print("No issue content found, exiting...")
-        return
+    try:
+        # 1. Issue本文を取得
+        issue_content, issue_number = get_issue_body()
 
-    diff_text = get_patch_from_openai(issue_content)
-    if "diff" not in diff_text:
-        print("No diff found in the response. Please check the prompt or OpenAI output.")
-        return
+        if not issue_content:
+            print("No issue content found. Exiting...")
+            return
 
-    apply_patch(diff_text)
-    branch_name = create_branch_and_push(issue_number)
-    create_pull_request(branch_name, issue_number)
+        # 2. OpenAI APIでdiffを生成
+        diff_text = generate_patch(issue_content)
+
+        if not diff_text or "diff" not in diff_text:
+            print("No valid diff found in the response.")
+            return
+
+        # 3. パッチを適用
+        apply_patch(diff_text)
+
+        # 4. 新しいブランチを作成してプッシュ
+        branch_name = create_branch_and_push(issue_number)
+
+        # 5. プルリクエストを作成
+        create_pull_request(branch_name, issue_number)
+
+    except Exception as e:
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     main()

@@ -21,7 +21,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r scripts/requirements.txt
+          pip install -r scripts/openai/requirements.txt
 
       - name: Run script to create PR from Issue
         run: python scripts/generate_pr_script.py
