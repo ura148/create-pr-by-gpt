@@ -24,7 +24,7 @@ jobs:
           pip install -r scripts/openai/requirements.txt
 
       - name: Run script to create PR from Issue
-        run: python scripts/generate_pr_script.py
+        run: python scripts/openai/generate_pr_script.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
