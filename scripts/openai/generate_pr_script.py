@@ -1,7 +1,7 @@
 import os
 import requests
 import subprocess
-from openai import OpenAI
+import openai
 
 # 環境変数から必要な値を取得
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -13,6 +13,9 @@ BASE_BRANCH = os.getenv("BASE_BRANCH", "main")
 # APIエンドポイント
 ISSUE_API_URL = f"https://api.github.com/repos/{REPOSITORY}/issues/{ISSUE_NUMBER}"
 PULLS_API_URL = f"https://api.github.com/repos/{REPOSITORY}/pulls"
+
+# OpenAI APIキーの設定
+openai.api_key = OPENAI_API_KEY
 
 # Issueの本文を取得
 def get_issue_body():
@@ -28,26 +31,31 @@ def get_issue_body():
 
 # OpenAI APIでdiffパッチを生成
 def generate_patch(issue_content):
-    client = OpenAI(api_key=OPENAI_API_KEY)
     prompt = (
-        f"以下のIssueを解決するために必要なコード修正をdiff形式で生成してください。\n\n"
-        f"Issue内容:\n{issue_content}\n\n"
+        f"以下はIssueの内容です:\n{issue_content}\n\n"
+        "このIssueを解決するためのコード修正をdiff形式で生成してください。\n"
         "出力は以下の形式にしてください:\n"
         "```diff\n"
-        "diff形式の修正内容\n"
+        "diff --git a/file/path b/file/path\n"
+        "--- a/file/path\n"
+        "+++ b/file/path\n"
+        "@@ -1,3 +1,3 @@\n"
+        "- old code\n"
+        "+ new code\n"
         "```\n"
     )
 
-    response = client.chat.completions.create(
-      model="gpt-3.5-turbo",
-      messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Hello!"}
-      ]
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=2000,
+        temperature=0
     )
 
-
-    return response.choices[0].message.content
+    return response['choices'][0]['message']['content'].strip()
 
 # diffパッチを適用
 def apply_patch(diff_text):
