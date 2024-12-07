@@ -1,13 +1,11 @@
-const { OpenAIApi, Configuration } = require("openai");
-const fs = require("fs");
+import { Configuration, OpenAIApi } from "openai";
+import fs from "fs";
 
-// 環境変数からAPIキーやパラメータを取得
 const apiKey = process.env.OPENAI_API_KEY;
 const issueContent = process.env.ISSUE_CONTENT || "";
 const relatedCode = process.env.RELATED_CODE || "";
 const commentContent = process.env.COMMENT_CONTENT || "";
 
-// OpenAI APIの設定
 const configuration = new Configuration({ apiKey });
 const openai = new OpenAIApi(configuration);
 
