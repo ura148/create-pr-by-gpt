@@ -37,7 +37,7 @@ def generate_patch(issue_content):
         "diff形式の修正内容\n"
         "```\n"
     )
-    response = openai_client.Completion.create(
+    response = openai_client.completion.create(
         model="gpt-4-turbo",
         prompt=prompt,
         max_tokens=2000,
