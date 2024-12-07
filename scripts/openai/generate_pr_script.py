@@ -41,9 +41,7 @@ def generate_patch(issue_content):
         model="gpt-3.5-turbo",  # 無料プランで利用可能なモデル
         messages=[
             {"role": "user", "content": prompt}
-        ],
-        max_tokens=2000,
-        temperature=0
+        ]
     )
 
     return response.choices[0].text.strip()
