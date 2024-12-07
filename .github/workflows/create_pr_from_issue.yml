@@ -1,5 +1,4 @@
 name: Create PR from Issue
-
 on:
   issues:
     types: [opened]
@@ -10,61 +9,26 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+
     steps:
-      - name: Check out code
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-      - name: Set up Node
-        uses: actions/setup-node@v3
+      - name: Set up Python
+        uses: actions/setup-python@v2
         with:
-          node-version: '18'
-      
+          python-version: '3.8'
+
       - name: Install dependencies
-        run: cd scripts/openai && npm install openai axios
-
-      - name: Extract Related Code
         run: |
-          if [ -f "src/main.js" ]; then
-            echo "RELATED_CODE=$(cat src/main.js | base64)" >> $GITHUB_ENV
-          else
-            echo "RELATED_CODE=" >> $GITHUB_ENV
-          fi
+          pip install -r scripts/requirements.txt
 
-      - name: Decode Related Code (if base64 used)
-        run: |
-          if [ -n "${{ env.RELATED_CODE }}" ]; then
-            echo "${{ env.RELATED_CODE }}" | base64 --decode > related_code.txt
-            echo "RELATED_CODE=$(cat related_code.txt)" >> $GITHUB_ENV
-          fi
-
-      - name: Prepare Environment Variables
-        run: echo "ISSUE_CONTENT=${{ github.event.issue.body }}" >> $GITHUB_ENV
-
-      - name: Generate Patch using OpenAI
+      - name: Run script to create PR from Issue
+        run: python scripts/generate_pr_script.py
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ISSUE_CONTENT: ${{ env.ISSUE_CONTENT }}
-          RELATED_CODE: ${{ env.RELATED_CODE }}
-        run: cd scripts/openai && node generate_patch.js
-
-      - name: Apply patch
-        run: |
-          sed -n '/```diff/,/```/p' patch.txt | sed '/```/d' > actual_patch.diff
-          git apply actual_patch.diff
-
-      - name: Commit and Push Changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b issue-${{ github.event.issue.number }}
-          git add .
-          git commit -m "Apply code changes from Issue #${{ github.event.issue.number }}"
-          git push origin issue-${{ github.event.issue.number }}
-
-      - name: Create Pull Request
-        run: |
-          curl -X POST \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer $GITHUB_TOKEN" \
-          -d '{"title":"Fix from Issue #'${{ github.event.issue.number }}'","head":"issue-'${{ github.event.issue.number }}'","base":"main"}' \
-          https://api.github.com/repos/${{ github.repository }}/pulls
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          # 必要に応じてターゲットブランチ名を指定
+          BASE_BRANCH: "main"
